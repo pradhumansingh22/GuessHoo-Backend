@@ -1,14 +1,18 @@
+import "dotenv/config";
 import express from "express";
 import { getRedisClient, prisma } from "./db.js";
 import { WebSocketServer } from "ws";
+import cors from "cors";
 
 const app = express();
 
 app.use(express.json());
+app.use(cors());
 
 const redis = await getRedisClient();
 
 app.post("/game/create", async (req, res) => {
+  console.log("Request Came");
   const { player1Name } = await req.body;
   const player1Id = crypto.randomUUID();
   try {
@@ -24,7 +28,7 @@ app.post("/game/create", async (req, res) => {
       player1Name: player1Name,
     });
     return res
-      .json({ message: "Game Created", gameId: newGame.gameId })
+      .json({ message: "Game Created", gameId: newGame.gameId,player1Id, success: true })
       .status(200);
   } catch (error) {
     console.log("Some error occurred while creating a game", error);
@@ -34,6 +38,7 @@ app.post("/game/create", async (req, res) => {
 
 app.post("/game/:gameId/join", async (req, res) => {
   const gameId = req.params.gameId;
+  console.log("gameId-",gameId);
   const { player2Name } = await req.body;
   const player2Id = crypto.randomUUID();
 
@@ -48,7 +53,6 @@ app.post("/game/:gameId/join", async (req, res) => {
       player2Id: player2Id,
       player2Name: player2Name,
     });
-    const player1Id = await redis.hGet(`game:${gameId}`, "player1Id");
     const player1Name = await redis.hGet(`game:${gameId}`, "player1Name");
 
     return res
@@ -56,7 +60,6 @@ app.post("/game/:gameId/join", async (req, res) => {
         message: "Game Joined",
         success: true,
         player2Id,
-        player1Id,
         player1Name,
       })
       .status(200);
@@ -83,15 +86,17 @@ wss.on("connection", (ws) => {
     //Handle Game Actions
     switch (type) {
       case "create":
+        console.log("Message came to create game");
         const player1Id = crypto.randomUUID();
+        const gameId = crypto.randomUUID();
         try {
-          const newGame = await prisma.game.create({
-            data: {
-              createdAt: new Date(Date.now()),
-            },
-          });
+          // const newGame = await prisma.game.create({
+          //   data: {
+          //     createdAt: new Date(Date.now()),
+          //   },
+          // });
 
-          redis.hSet(`game:${newGame.gameId}`, {
+          redis.hSet(`game:${gameId}`, {
             status: "created",
             player1Id: player1Id,
             player1Name: data.player1Name,
@@ -99,7 +104,7 @@ wss.on("connection", (ws) => {
           sendSocketMessage({
             type: "create",
             success: "true",
-            gameId: newGame.gameId,
+            gameId: gameId,
             player1Id: player1Id,
           });
         } catch (error) {
@@ -110,16 +115,25 @@ wss.on("connection", (ws) => {
           });
         }
         break;
+      
       case "selection1":
         await redis.hSet(`game:${data.gameId}`, {
           player1SelectedImage: data.selection,
+          
         });
+        const img2 = await redis.hGet(`game:${data.gameId}`, "player2SelectedImage");
+        if (img2) sendSocketMessage({ type: "imageSelection" });
         break;
 
       case "selection2":
         await redis.hSet(`game:${data.gameId}`, {
           player2SelectedImage: data.selection,
         });
+        const img1 = await redis.hGet(
+          `game:${data.gameId}`,
+          "player1SelectedImage"
+        );
+        if (img1) sendSocketMessage({ type: "imageSelection" });
         break;
 
       case "start":
@@ -133,7 +147,7 @@ wss.on("connection", (ws) => {
           `${playerNo}SelectedImage`
         );
 
-        const isCorrect = selectedImage == data.guess;
+        const isCorrect = selectedImage == data.guessedImage;
         if (isCorrect) {
           await redis.hSet(`game:${data.gameId}`, { status: "over" });
 
@@ -155,6 +169,7 @@ wss.on("connection", (ws) => {
 
       case "chat":
         sendSocketMessage({
+          type:"chat",
           sendBy: data.name,
           msg: data.chatMessage,
         });
