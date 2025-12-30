@@ -3,13 +3,46 @@ import express from "express";
 import { getRedisClient, prisma } from "./db.js";
 import { WebSocketServer } from "ws";
 import cors from "cors";
+import cloudinary from "../config/cloudinary.js";
+import { adminMiddleware } from "../middleware/adminMiddleware.js";
 
 const app = express();
 
 app.use(express.json());
+app.use(express.urlencoded({extended:true}));
+
 app.use(cors());
 
 const redis = await getRedisClient();
+
+
+app.post("/admin/img/upload", async (req, res) => {
+
+  const data = await req.body;
+  console.log("data", data);
+
+  const file = data.file;
+  //const isAdmin = adminMiddleware(hash);
+  // if (!isAdmin) {
+  //   return res.json({ message: "Unauthorized" }).status(401);
+  // }
+  //console.log("file", file);
+
+  const uploadResult = await cloudinary.uploader
+    .upload(
+      file,
+      {
+        public_id: "images",
+      }
+    )
+    .catch((error) => {
+      console.log(error);
+    });
+
+  console.log(uploadResult);
+
+  return res.json({ msg: "file uploaded" }).status(200);
+})
 
 app.post("/game/create", async (req, res) => {
   console.log("Request Came");
@@ -21,6 +54,8 @@ app.post("/game/create", async (req, res) => {
         createdAt: new Date(Date.now()),
       },
     });
+
+  
 
     redis.hSet(`game:${newGame.gameId}`, {
       status: "created",
