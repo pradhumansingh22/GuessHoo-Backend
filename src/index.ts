@@ -5,6 +5,7 @@ import { WebSocketServer } from "ws";
 import cors from "cors";
 import cloudinary from "../config/cloudinary.js";
 import { adminMiddleware } from "../middleware/adminMiddleware.js";
+import multer from "multer";
 
 const app = express();
 
@@ -15,34 +16,35 @@ app.use(cors());
 
 const redis = await getRedisClient();
 
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
-app.post("/admin/img/upload", async (req, res) => {
 
-  const data = await req.body;
-  console.log("data", data);
-
-  const file = data.file;
+app.post("/admin/img/upload", upload.single("file"), async (req, res) => {
+  const file = await req.file;
+  console.log("file");
   //const isAdmin = adminMiddleware(hash);
   // if (!isAdmin) {
   //   return res.json({ message: "Unauthorized" }).status(401);
   // }
   //console.log("file", file);
 
-  const uploadResult = await cloudinary.uploader
-    .upload(
-      file,
-      {
-        public_id: "images",
-      }
-    )
-    .catch((error) => {
-      console.log(error);
-    });
+   const response =  cloudinary.uploader
+     .upload_stream({ folder: "images" }, (error, result) => {
+       if (error) {
+         console.error(error);
+         return res.status(500).json({ message: "Upload failed" });
+       }
 
-  console.log(uploadResult);
+       return res.status(200).json({
+         message: "File uploaded",
+         url: result!.secure_url,
+       });
+     })
+     .end(req.file!.buffer); 
 
-  return res.json({ msg: "file uploaded" }).status(200);
-})
+
+});
 
 app.post("/game/create", async (req, res) => {
   console.log("Request Came");
