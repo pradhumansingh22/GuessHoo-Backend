@@ -137,6 +137,13 @@ app.post("/game/:gameId/join", async (req, res) => {
   }
 });
 
+app.get("/images/:poolId", async (req, res) => {
+  const poolId = req.params.poolId;
+  const images = await prisma.image.findMany({ where: { poolId } });
+  
+  return res.json({ images, success: true }).status(200);
+})
+
 const server = app.listen(8080, () => {
   console.log("WebSocket Server listening at port 8080");
 });
