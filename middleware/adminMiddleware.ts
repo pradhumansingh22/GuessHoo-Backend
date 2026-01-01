@@ -1,7 +1,8 @@
 import bcrypt from "bcrypt";
 
-export const adminMiddleware = async (hash: string) => {
-    const adminPass = process.env.ADMIN_PASSWORD!;
-    const isAdmin = bcrypt.compare(adminPass, hash);
+export const adminMiddleware = async (password: string) => {
+    const hash = process.env.HASH!;
+    const isAdmin = await bcrypt.compare(password, hash);
+   // console.log(isAdmin);
     return isAdmin;
 }

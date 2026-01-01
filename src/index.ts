@@ -7,10 +7,11 @@ import cloudinary from "../config/cloudinary.js";
 import { adminMiddleware } from "../middleware/adminMiddleware.js";
 import multer from "multer";
 
+
 const app = express();
 
 app.use(express.json());
-app.use(express.urlencoded({extended:true}));
+app.use(express.urlencoded({ extended: true }));
 
 app.use(cors());
 
@@ -19,31 +20,58 @@ const redis = await getRedisClient();
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-
 app.post("/admin/img/upload", upload.single("file"), async (req, res) => {
-  const file = await req.file;
-  console.log("file");
-  //const isAdmin = adminMiddleware(hash);
-  // if (!isAdmin) {
-  //   return res.json({ message: "Unauthorized" }).status(401);
-  // }
-  //console.log("file", file);
-
-   const response =  cloudinary.uploader
-     .upload_stream({ folder: "images" }, (error, result) => {
-       if (error) {
-         console.error(error);
-         return res.status(500).json({ message: "Upload failed" });
-       }
-
-       return res.status(200).json({
-         message: "File uploaded",
-         url: result!.secure_url,
-       });
-     })
-     .end(req.file!.buffer); 
+  const { poolName, imageName, password } = await req.body;  
 
 
+  const isAdmin = await adminMiddleware(password);
+  
+  console.log("isAdmin", isAdmin);
+  if (!isAdmin) {
+    return res.json({ message: "Unauthorized" }).status(401);
+  }
+
+  cloudinary.uploader
+    .upload_stream({ folder: poolName }, async (error, result) => {
+      if (error) {
+        console.error(error);
+        return res.status(500).json({ message: "Upload failed" });
+      }
+
+      const imageUrl = result?.secure_url!;
+
+      const existingPool = await prisma.imagePool.findFirst({
+        where: { poolName },
+      });
+
+      if (existingPool) {
+        await prisma.image.create({
+          data: {
+            imageName: imageName as string,
+            imageUrl,
+            poolId: existingPool.id,
+          },
+        });
+      } else {
+        await prisma.imagePool.create({
+          data: {
+            poolName,
+            images: {
+              create: {
+                imageName,
+                imageUrl,
+              },
+            },
+          },
+        });
+      }
+
+      return res.status(200).json({
+        message: "File uploaded",
+        success: true,
+      });
+    })
+    .end(req.file!.buffer);
 });
 
 app.post("/game/create", async (req, res) => {
@@ -57,15 +85,18 @@ app.post("/game/create", async (req, res) => {
       },
     });
 
-  
-
-    redis.hSet(`game:${newGame.gameId}`, {
+    redis.hSet(`game:${newGame.id}`, {
       status: "created",
       player1Id: player1Id,
       player1Name: player1Name,
     });
     return res
-      .json({ message: "Game Created", gameId: newGame.gameId,player1Id, success: true })
+      .json({
+        message: "Game Created",
+        gameId: newGame.id,
+        player1Id,
+        success: true,
+      })
       .status(200);
   } catch (error) {
     console.log("Some error occurred while creating a game", error);
@@ -75,11 +106,11 @@ app.post("/game/create", async (req, res) => {
 
 app.post("/game/:gameId/join", async (req, res) => {
   const gameId = req.params.gameId;
-  console.log("gameId-",gameId);
+  console.log("gameId-", gameId);
   const { player2Name } = await req.body;
   const player2Id = crypto.randomUUID();
 
-  const game = await prisma.game.findFirst({ where: { gameId } });
+  const game = await prisma.game.findFirst({ where: { id: gameId } });
   if (!game) {
     return res.json({ message: "Invalid Id", success: false }).status(400);
   }
@@ -152,13 +183,15 @@ wss.on("connection", (ws) => {
           });
         }
         break;
-      
+
       case "selection1":
         await redis.hSet(`game:${data.gameId}`, {
           player1SelectedImage: data.selection,
-          
         });
-        const img2 = await redis.hGet(`game:${data.gameId}`, "player2SelectedImage");
+        const img2 = await redis.hGet(
+          `game:${data.gameId}`,
+          "player2SelectedImage"
+        );
         if (img2) sendSocketMessage({ type: "imageSelection" });
         break;
 
@@ -206,7 +239,7 @@ wss.on("connection", (ws) => {
 
       case "chat":
         sendSocketMessage({
-          type:"chat",
+          type: "chat",
           sendBy: data.name,
           msg: data.chatMessage,
         });

@@ -14,22 +14,22 @@ datasource db {
 }
 
 model game {
-  gameId   String @unique @id @default(uuid())
+  id   String @unique @id @default(uuid())
   createdAt DateTime
   player1Image String?
   player2Image String?
 }
 
 model image {
-  imageId String @unique @id @default(uuid())
+  id String @unique @id @default(uuid())
   imageUrl String @unique
   imageName String
-  pool imagePool @relation(fields: [imageId], references: [poolId])
+  pool imagePool @relation(fields: [poolId], references: [id])
   poolId String
 }
 
 model imagePool {
-    poolId String @unique @id @default(uuid())
+    id String @unique @id @default(uuid())
     poolName String @unique
     images image[]
 }
