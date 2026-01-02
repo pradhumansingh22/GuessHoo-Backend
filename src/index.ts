@@ -7,7 +7,6 @@ import cloudinary from "../config/cloudinary.js";
 import { adminMiddleware } from "../middleware/adminMiddleware.js";
 import multer from "multer";
 
-
 const app = express();
 
 app.use(express.json());
@@ -21,11 +20,10 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 app.post("/admin/img/upload", upload.single("file"), async (req, res) => {
-  const { poolName, imageName, password } = await req.body;  
-
+  const { poolName, imageName, password } = await req.body;
 
   const isAdmin = await adminMiddleware(password);
-  
+
   console.log("isAdmin", isAdmin);
   if (!isAdmin) {
     return res.json({ message: "Unauthorized" }).status(401);
@@ -140,9 +138,9 @@ app.post("/game/:gameId/join", async (req, res) => {
 app.get("/images/:poolId", async (req, res) => {
   const poolId = req.params.poolId;
   const images = await prisma.image.findMany({ where: { poolId } });
-  
+
   return res.json({ images, success: true }).status(200);
-})
+});
 
 const server = app.listen(8080, () => {
   console.log("WebSocket Server listening at port 8080");
@@ -192,25 +190,33 @@ wss.on("connection", (ws) => {
         break;
 
       case "selection1":
+        console.log("aya");
         await redis.hSet(`game:${data.gameId}`, {
-          player1SelectedImage: data.selection,
+          player1SelectedImage: data.imageId,
         });
         const img2 = await redis.hGet(
           `game:${data.gameId}`,
           "player2SelectedImage"
         );
-        if (img2) sendSocketMessage({ type: "imageSelection" });
+        if (img2) {
+          console.log("Both selected");
+          sendSocketMessage({ type: "imageSelection" });
+        }
+
         break;
 
       case "selection2":
         await redis.hSet(`game:${data.gameId}`, {
-          player2SelectedImage: data.selection,
+          player2SelectedImage: data.imageId,
         });
         const img1 = await redis.hGet(
           `game:${data.gameId}`,
           "player1SelectedImage"
         );
-        if (img1) sendSocketMessage({ type: "imageSelection" });
+        if (img1) {
+          console.log("Both selected");
+          sendSocketMessage({ type: "imageSelection" });
+        }
         break;
 
       case "start":
